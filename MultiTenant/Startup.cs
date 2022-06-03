@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using MultiTenant.Data;
 using MultiTenant.Domain;
+using MultiTenant.Middlewares;
+using MultiTenant.Provider;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,6 +31,7 @@ namespace MultiTenant
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddScoped<TenantData>();
 
             services.AddControllers();
             services.AddSwaggerGen(c =>
@@ -52,36 +55,18 @@ namespace MultiTenant
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "MultiTenant v1"));
             }
 
-            DatabaseInitialize(app);
-
             app.UseHttpsRedirection();
 
             app.UseRouting();
 
             app.UseAuthorization();
 
+            app.UseMiddleware<TenantMiddleware>();
+
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
             });
-        }
-
-        private void DatabaseInitialize(IApplicationBuilder app)
-        {
-            using var db = app.ApplicationServices
-                .CreateScope()
-                .ServiceProvider
-                .GetRequiredService<ApplicationContext>();
-
-            db.Database.EnsureDeleted();
-            db.Database.EnsureCreated();
-
-            for (var i=1; i<= 5; i++)
-            {
-                db.People.Add(new Person { Name = $"Person {i}" });
-                db.Products.Add(new Product { Description = $"Product {i}" });
-            }
-            db.SaveChanges();
         }
     }
 }
