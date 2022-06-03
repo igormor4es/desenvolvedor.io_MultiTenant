@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ using MultiTenant.Data;
 using MultiTenant.Data.Interceptors;
 using MultiTenant.Data.ModelFactory;
 using MultiTenant.Domain;
+using MultiTenant.Extensions;
 using MultiTenant.Middlewares;
 using MultiTenant.Provider;
 using System;
@@ -42,18 +44,23 @@ namespace MultiTenant
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "MultiTenant", Version = "v1" });
             });
 
-            services.AddScoped<StrategySchemaInterceptor>();
+            services.AddHttpContextAccessor();
 
-            services.AddDbContext<ApplicationContext>((provider, options) =>
+            services.AddScoped<ApplicationContext>(provider =>
             {
-                options
-                    .UseSqlServer(Configuration.GetConnectionString("DefaultConnection"))
+                var optionsBuilder = new DbContextOptionsBuilder<ApplicationContext>();
+
+                var httpContext = provider.GetService<IHttpContextAccessor>()?.HttpContext;
+                var tenantId = httpContext?.GetTenantId();
+                //var connectionString = Configuration.GetConnectionString(tenantId);
+                var connectionString = Configuration.GetConnectionString("DefaultConnection").Replace("Multitenant", tenantId);
+
+                optionsBuilder
+                    .UseSqlServer(connectionString)
                     .LogTo(Console.WriteLine)
-                    .ReplaceService<IModelCacheKeyFactory, StrategySchemaModelCacheKey>()
                     .EnableSensitiveDataLogging();
 
-                //var interceptor = provider.GetRequiredService<StrategySchemaInterceptor>();
-                //options.AddInterceptors(interceptor);
+                return new ApplicationContext(optionsBuilder.Options);
             });
         }
 
@@ -72,8 +79,6 @@ namespace MultiTenant
             app.UseRouting();
 
             app.UseAuthorization();
-
-            app.UseMiddleware<TenantMiddleware>();
 
             app.UseEndpoints(endpoints =>
             {
